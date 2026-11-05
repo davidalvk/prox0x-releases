@@ -1,6 +1,6 @@
 # 🛡️ prox0x — Suite DAST y proxy de auditoría web
 
-![Versión](https://img.shields.io/badge/versión-1.2.0-00ff9d?style=for-the-badge)
+![Versión](https://img.shields.io/badge/versión-1.2.1-00ff9d?style=for-the-badge)
 ![Plataformas](https://img.shields.io/badge/plataformas-Linux%20%7C%20macOS%20%7C%20Windows-00c8ff?style=for-the-badge)
 ![Sin dependencias](https://img.shields.io/badge/sin%20Java%20%7C%20Node%20%7C%20dependencias-ffb000?style=for-the-badge)
 ![Freeware](https://img.shields.io/badge/precio-100%25%20gratis-00ff9d?style=for-the-badge)
@@ -111,6 +111,28 @@ tags efectivos.
 > Las plantillas de Nuclei son de ProjectDiscovery y se distribuyen bajo
 > licencia MIT. Consulta la sección de
 > [Créditos y Agradecimientos](#-créditos-y-agradecimientos).
+
+### 🔧 v1.2.1 — Mantenimiento: Crawler y Directory Fuzzing
+
+Esta actualización corrige el descubrimiento automático de formularios y añade
+un fallback para que el escaneo nunca termine sin probar nada:
+
+- **La semilla explícita ignora `robots.txt`**. Si el usuario indica una URL
+  como `/panel/login`, se rastrea siempre; los enlaces descubiertos siguen
+  respetando `robots.txt`.
+- **Parser de formularios más robusto**:
+  - detecta `method="post"` y extrae todos los `<input name="...">`;
+  - los campos sin `type` se tratan como `text`;
+  - `type="password"` se conserva;
+  - los formularios sin `action` usan la URL actual;
+  - los formularios sin `</form>` se cierran correctamente al final del HTML.
+- **Menos falsos positivos en login**: el escáner compara la respuesta del
+  payload con el baseline. Un error estático como “Usuario o contraseña
+  incorrectos” no se marca como SQLi salvo que aparezca un error SQL nuevo.
+- **Directory Fuzzing (fallback)**: si no hay formularios ni parámetros, se
+  prueban rutas comunes como `/admin`, `/.env`, `/api`, `/config`, `/login`,
+  `/.git/config`, `/actuator` y `/swagger`. Las respuestas **200/403** se
+  reportan en Hallazgos como **“Ruta Interesante Encontrada”**.
 
 ---
 
@@ -831,12 +853,12 @@ Tailwind CSS y lucide por las bases de la interfaz y la API.
 ## 📌 Enlaces
 
 - **Releases:** https://github.com/davidalvk/prox0x-releases/releases
-- **Release v1.2.0:** https://github.com/davidalvk/prox0x-releases/releases/tag/v1.2.0
+- **Release v1.2.1:** https://github.com/davidalvk/prox0x-releases/releases/tag/v1.2.1
 - **Repositorio público:** https://github.com/davidalvk/prox0x-releases
 
 ---
 
 <p align="center">
-  <strong>prox0x v1.2.0 — Nuclei, Auto-Tech & UX Overhaul</strong><br/>
+  <strong>prox0x v1.2.1 — Crawler fixes & route fallback</strong><br/>
   Hecho para auditorías éticas, laboratorios y Bug Bounty autorizado.
 </p>

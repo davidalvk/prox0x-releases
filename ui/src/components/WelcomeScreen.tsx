@@ -123,7 +123,7 @@ export function WelcomeScreen() {
           </div>
           <div className="flex items-center gap-3">
             <CertificateModal showTooltip={false} />
-            <span className="font-mono text-xs text-amber-400">v1.2.0</span>
+            <span className="font-mono text-xs text-amber-400">v1.2.1</span>
           </div>
         </header>
 

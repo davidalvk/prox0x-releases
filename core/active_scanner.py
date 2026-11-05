@@ -178,6 +178,16 @@ def _analyze(
             # Se evalúa en pareja al terminar scan_flow_active.
             return None
 
+        # Si el formulario devuelve exactamente el mismo error que el
+        # baseline (login incorrecto, validación estática, etc.) no hay una
+        # señal SQL nueva que justifique un hallazgo.
+        if (
+            probe.response_body is not None
+            and response.status_code == probe.baseline_status
+            and body == probe.response_body
+        ):
+            return None
+
         candidate, severity, matched = sql_candidate(
             body,
             probe.sql_markers,

@@ -273,7 +273,7 @@ export function Sidebar({ open }: SidebarProps) {
             </span>
             <span>LOOPBACK // SECURE</span>
           </span>
-          <span className="font-mono text-[10px] text-amber-400">v1.2.0</span>
+          <span className="font-mono text-[10px] text-amber-400">v1.2.1</span>
         </div>
         <p className="mt-2 border-t border-surface-800 pt-2 font-mono text-[10px] leading-relaxed text-zinc-400">
           Creado por <span className="font-semibold text-accent">Davidal VK</span>

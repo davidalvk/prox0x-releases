@@ -241,6 +241,7 @@ class _PageParser(HTMLParser):
         elif tag in {"iframe", "frame"} and values.get("src"):
             self.links.append(values["src"])
         elif tag == "form":
+            self._finalize_form()
             self._current_form = _FormBuilder(
                 action=values.get("action", ""),
                 method=(values.get("method") or "GET").upper(),
@@ -251,10 +252,11 @@ class _PageParser(HTMLParser):
             )
         elif tag in {"input", "select", "textarea", "button"}:
             if self._current_form is not None and values.get("name"):
+                default_type = "text" if tag == "input" else tag
                 self._current_form.fields.append(
                     FormField(
                         name=values["name"],
-                        type=(values.get("type") or tag).lower(),
+                        type=(values.get("type") or default_type).lower(),
                         value=values.get("value", ""),
                     )
                 )
@@ -268,13 +270,23 @@ class _PageParser(HTMLParser):
 
     def handle_endtag(self, tag: str) -> None:
         tag = tag.lower()
-        if tag == "form" and self._current_form is not None:
-            self.forms.append(self._current_form)
-            self._current_form = None
+        if tag == "form":
+            self._finalize_form()
         elif tag == "script" and self._in_script:
             self.inline_scripts.append("".join(self._script_buffer))
             self._in_script = False
             self._script_buffer = []
+
+    def _finalize_form(self) -> None:
+        """Cierra el formulario actual aunque falte ``</form>``."""
+
+        if self._current_form is not None:
+            self.forms.append(self._current_form)
+            self._current_form = None
+
+    def close(self) -> None:
+        super().close()
+        self._finalize_form()
 
     def handle_data(self, data: str) -> None:
         if self._in_script:
@@ -419,7 +431,9 @@ class Crawler:
             return False
         return port == self._port
 
-    def _add_url(self, url: str, depth: int) -> None:
+    def _add_url(
+        self, url: str, depth: int, *, ignore_robots: bool = False
+    ) -> None:
         if not url:
             return
         if self._max_depth > 0 and depth > self._max_depth:
@@ -427,7 +441,11 @@ class Crawler:
         normalized = normalize_url(url)
         if not normalized or not self.in_scope(normalized):
             return
-        if self.config.respect_robots and not self._robots.allows(normalized):
+        if (
+            not ignore_robots
+            and self.config.respect_robots
+            and not self._robots.allows(normalized)
+        ):
             return
         if normalized in self._enqueued:
             return
@@ -478,7 +496,10 @@ class Crawler:
             if self.config.parse_robots:
                 sitemaps = await self._load_robots(session)
 
-            self._add_url(self.seed_url, 1)
+            # La semilla explícita del usuario se rastrea siempre: robots.txt
+            # solo se aplica a los enlaces descubiertos, no al objetivo que el
+            # pentester ha indicado manualmente.
+            self._add_url(self.seed_url, 1, ignore_robots=True)
 
             if self.config.parse_sitemaps:
                 default_sitemap = urljoin(self.seed_url, "/sitemap.xml")

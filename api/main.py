@@ -23,7 +23,13 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from urllib.parse import (
+    parse_qsl,
+    urlencode,
+    urljoin,
+    urlsplit,
+    urlunsplit,
+)
 
 from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
@@ -73,6 +79,7 @@ from core.scan.points import config_for_intensity
 from core.scan.tech_detector import TechDetector
 from core.scan.template_engine import TemplateEngine, TemplateMatch
 from core.scan.template_manager import TemplateManager, TemplateUpdateResult
+from core.scanner import Finding
 from core.session import SessionManager
 from core.store import SQLiteFlowStore
 from core.store.capture import message_record
@@ -165,6 +172,16 @@ class SessionConfigRequest(BaseModel):
 FULL_SCAN_MAX_CRAWL_URLS = 200
 TEMPLATE_CRAWL_MAX_URLS = 50
 CRAWL_MAX_URLS = UNLIMITED_MAX_URLS
+INTERESTING_PATHS = (
+    "/admin",
+    "/.env",
+    "/api",
+    "/config",
+    "/login",
+    "/.git/config",
+    "/actuator",
+    "/swagger",
+)
 
 
 class OOBModeRequest(BaseModel):
@@ -1067,6 +1084,104 @@ def _flow_from_attempt(
     )
 
 
+def _interesting_route_urls(seed_url: str) -> list[str]:
+    """Genera las URLs del fallback de rutas comunes sobre el host semilla."""
+
+    parts = urlsplit(seed_url)
+    if parts.scheme not in ("http", "https") or not parts.netloc:
+        return []
+    base = f"{parts.scheme}://{parts.netloc}/"
+    return [urljoin(base, path.lstrip("/")) for path in INTERESTING_PATHS]
+
+
+async def _probe_interesting_routes(
+    job: ActiveScanJob,
+    seed_url: str,
+    engine: RequestEngine,
+    store: SQLiteFlowStore,
+    *,
+    custom_headers: tuple[tuple[str, str], ...] = (),
+) -> None:
+    """Fallback cuando el crawl no encuentra formularios ni parámetros.
+
+    Prueba rutas comunes y reporta como hallazgo las que responden 200/403.
+    También registra cada sonda como intento para que el resumen del Full Site
+    Scan no termine en "0 ataques" sin haber probado nada.
+    """
+
+    urls = _interesting_route_urls(seed_url)
+    if not urls:
+        return
+
+    base_id = max(store.max_id() + 1, int(time.time() * 1_000_000))
+    job.total += len(urls)
+
+    for index, url in enumerate(urls):
+        target = _FullScanTarget(method="GET", url=url)
+        request, service = _request_for_target(target, custom_headers)
+        attempt = await engine.send(
+            request,
+            service,
+            options=RequestOptions(throttle_ms=0),
+            label=f"fullscan:route:{index}",
+        )
+        job.completed += 1
+        job.total_attempts += 1
+
+        if not attempt.ok or attempt.response is None:
+            job.errors += 1
+            continue
+
+        status = attempt.response.status_code
+        if status not in (200, 403):
+            continue
+
+        flow_id = _template_flow_id(base_id, index)
+        flow = _flow_from_attempt(
+            flow_id,
+            request,
+            service,
+            attempt,
+            is_scan_flow=True,
+        )
+        store.save(flow)
+        job.flow_ids.append(flow.id)
+
+        path = urlsplit(url).path or "/"
+        evidence = (
+            f"Ruta Interesante Encontrada · GET {path} → HTTP {status}"
+        )
+        finding = Finding(
+            flow_id=flow.id,
+            url=url,
+            kind="interesting_route",
+            severity="low" if status == 200 else "info",
+            evidence=evidence,
+        )
+        job.findings.extend(store.add_findings([finding]))
+        store.add_scan_attempts(
+            [
+                {
+                    "scan_id": job.id,
+                    "flow_id": flow.id,
+                    "url": url,
+                    "parameter": "",
+                    "location": "path",
+                    "attack": "route",
+                    "payload": path,
+                    "status_code": status,
+                    "result": "safe",
+                    "evidence": evidence,
+                    "evidence_match": "",
+                    "evidence_offset": None,
+                    "request_raw": request.raw[: 512 * 1024],
+                    "response_raw": attempt.response.raw[: 512 * 1024],
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                }
+            ]
+        )
+
+
 async def _run_full_site_scan(
     job: ActiveScanJob,
     seed_url: str,
@@ -1128,14 +1243,11 @@ async def _run_full_site_scan(
         job.pages_found = len(crawl.pages)
         job.forms_found = len(crawl.forms)
 
+        has_forms = any(form.fields for form in crawl.forms)
+        has_params = any("?" in url for url in crawl.urls)
         targets = _full_scan_targets(crawl)
         job.total = len(targets)
         job.phase = "analyzing"
-
-        if not targets:
-            job.status = "completed"
-            job.phase = "completed"
-            return
 
         # IDs altos pero seguros en JavaScript (< 2^53): el navegador redondea
         # números mayores y el detalle del hallazgo pediría un ID inexistente.
@@ -1172,6 +1284,16 @@ async def _run_full_site_scan(
                 on_attempt=on_attempt,
             )
             job.completed += 1
+
+        if not has_forms and not has_params:
+            job.phase = "scanning"
+            await _probe_interesting_routes(
+                job,
+                seed_url,
+                engine,
+                store,
+                custom_headers=job.custom_headers,
+            )
 
         job.status = "completed"
         job.phase = "completed"

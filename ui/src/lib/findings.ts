@@ -31,6 +31,7 @@ export const KIND_LABELS: Record<string, string> = {
   active_command: "Active Command Injection",
   active_traversal: "Path Traversal",
   nuclei_template: "Nuclei Template",
+  interesting_route: "Ruta Interesante Encontrada",
 };
 
 export function severityLabel(value: string): string {

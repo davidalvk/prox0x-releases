@@ -55,6 +55,7 @@ const ATTACK_LABELS: Record<string, string> = {
   sqli: "SQLi",
   command: "Command",
   traversal: "Traversal",
+  route: "Ruta",
 };
 
 const INTENSITY_LABELS: Record<ScanIntensity, string> = {

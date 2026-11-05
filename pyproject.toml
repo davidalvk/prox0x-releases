@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "prox0x"
-version = "1.2.0"
+version = "1.2.1"
 description = "Proxy interceptador y suite de auditoría web para red team con CA propia"
 readme = "README.md"
 requires-python = ">=3.12"
