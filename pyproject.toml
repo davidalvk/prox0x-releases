@@ -1,0 +1,65 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "prox0x"
+version = "1.2.0"
+description = "Proxy interceptador y suite de auditoría web para red team con CA propia"
+readme = "README.md"
+requires-python = ">=3.12"
+authors = [{ name = "Davidal VK" }]
+keywords = ["proxy", "mitm", "pentest", "redteam", "security"]
+classifiers = [
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+    "Framework :: AsyncIO",
+]
+
+# Dependencias de runtime (Plan.md §7.4). `wsproto`, `fastapi`, `uvicorn` y
+# `uvloop` se añadirán en sus fases (F4 WebSockets y F5); no se cargan antes.
+dependencies = [
+    "aiohttp>=3.9",
+    "brotli>=1.1",
+    "certifi>=2024.2.2",
+    "cryptography>=42.0",
+    "fastapi>=0.110",
+    "h11>=0.14.0",
+    "h2>=4.1",
+    "pydantic>=2.6",
+    "PyYAML>=6.0",
+    "structlog>=24.1",
+    "typer>=0.12",
+    "uvicorn>=0.29",
+    "websockets>=12.0",
+]
+
+# pytest, pytest-asyncio y trustme son dependencias de test (Plan.md §7.4, fila
+# "Tests"), no de runtime; van en el extra `dev`.
+[project.optional-dependencies]
+dev = [
+    "httpx>=0.27",
+    "pyinstaller>=6.0",
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "trustme>=1.1",
+]
+
+[project.urls]
+Homepage = "https://davidalvk.com"
+LinkedIn = "https://www.linkedin.com/in/davidalvk/"
+
+[project.scripts]
+prox0x = "cli.main:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["core*", "proxy*", "repeater*", "intruder*", "api*", "cli*"]
+exclude = ["tests*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = "-q"
